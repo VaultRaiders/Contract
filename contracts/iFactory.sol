@@ -73,7 +73,7 @@ contract iFactory is
     function createBot(
         address _creator,
         uint256 _instructionLengthFee
-    ) external payable nonReentrant whenNotPaused onlyOwner returns (address) {
+    ) external payable nonReentrant whenNotPaused returns (address) {
         uint256 totalFee = _instructionLengthFee + botCreationFee;
         if (msg.value < totalFee) revert InvalidFee();
 
@@ -138,22 +138,8 @@ contract iFactory is
         emit initPriceUpdated(oldPrice, newPrice);
     }
 
-    function pauseBot(address botAddress) external {
-        if (!bots[botAddress].isActive) revert BotNotFound();
-        if (msg.sender != bots[botAddress].creator && msg.sender != owner())
-            revert UnauthorizedAccess();
-
-        iBot(payable(botAddress)).pause();
-        emit BotPaused(botAddress);
-    }
-
-    function unpauseBot(address botAddress) external {
-        if (!bots[botAddress].isActive) revert BotNotFound();
-        if (msg.sender != bots[botAddress].creator && msg.sender != owner())
-            revert UnauthorizedAccess();
-
-        iBot(payable(botAddress)).unpause();
-        emit BotUnpaused(botAddress);
+    function disburse(address botAddress, address to) external onlyOwner {
+        iBot(payable(botAddress)).disburse(to);
     }
 
     function _authorizeUpgrade(
@@ -174,8 +160,4 @@ contract iFactory is
     }
 
     receive() external payable {}
-
-    fallback() external payable {
-        revert("Function does not exist");
-    }
 }

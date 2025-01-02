@@ -249,44 +249,5 @@ describe("iFactory and iBot", function () {
             // Actual cost should be price + gas fees
             expect(actualCost).to.be.closeTo(price + gasUsed, ethers.parseEther("0.0001"));
         });
-
-        it("Should allow factory to pause and unpause", async function () {
-            const { bot, iFactoryProxy, botAddress, owner } = await loadFixture(deployBotFixture);
-
-            await expect(iFactoryProxy.connect(owner).pauseBot(botAddress))
-                .to.emit(iFactoryProxy, "BotPaused")
-                .withArgs(botAddress);
-
-            expect(await bot.paused()).to.be.true;
-
-            await expect(iFactoryProxy.connect(owner).unpauseBot(botAddress))
-                .to.emit(iFactoryProxy, "BotUnpaused")
-                .withArgs(botAddress);
-
-            expect(await bot.paused()).to.be.false;
-        });
-
-        it("Should fail when non-owner tries to pause", async function () {
-            const { iFactoryProxy, botAddress, user2 } = await loadFixture(deployBotFixture);
-
-            await expect(
-                iFactoryProxy.connect(user2).pauseBot(botAddress)
-            ).to.be.revertedWithCustomError(iFactoryProxy, "UnauthorizedAccess");
-        });
-
-        // Previous test case update
-        it("Should fail to buy ticket when paused", async function () {
-            const { bot, iFactoryProxy, botAddress, owner, user2 } = await loadFixture(
-                deployBotFixture
-            );
-
-            await iFactoryProxy.connect(owner).pauseBot(botAddress);
-
-            const price = await bot.getPrice();
-
-            await expect(
-                bot.connect(user2).buyTicket({ value: price })
-            ).to.be.revertedWithCustomError(bot, "EnforcedPause");
-        });
     });
 });

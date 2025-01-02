@@ -10,16 +10,22 @@ contract iBot is Initializable, ReentrancyGuard, Pausable {
     address public creator;
     uint256 public order;
 
-    bool private initialized;
     bool private locked;
+
+    uint256 snapshotBalance;
+    address private latestBuyer;
+    uint256 private lastPurchaseTimestamp;
+    mapping(address => uint256) public purchases;
 
     uint256 private initPrice;
 
-    event TicketsPurchased(
+    event TicketPurchased(
         address indexed buyer,
         uint256 cost,
         uint256 timestamp
     );
+
+    event Disbursement(address indexed to, uint256 amount);
 
     error ZeroAddress();
     error AlreadyInitialized();
@@ -38,15 +44,12 @@ contract iBot is Initializable, ReentrancyGuard, Pausable {
         address _creator,
         uint256 _initPrice
     ) public payable initializer {
-        if (initialized) revert AlreadyInitialized();
         if (_factory == address(0)) revert ZeroAddress();
 
         iFactory = _factory;
         creator = _creator;
         initPrice = _initPrice;
         order = 0;
-
-        initialized = true;
     }
 
     function getPrice() public view returns (uint256) {
@@ -71,8 +74,48 @@ contract iBot is Initializable, ReentrancyGuard, Pausable {
             _safeTransfer(msg.sender, excess);
         }
 
+        initPrice = price;
         order++;
-        emit TicketsPurchased(msg.sender, price, block.timestamp);
+        purchases[msg.sender] += poolFee;
+        latestBuyer = msg.sender;
+        lastPurchaseTimestamp = block.timestamp;
+
+        emit TicketPurchased(msg.sender, price, block.timestamp);
+    }
+
+    function overdueRefund() public nonReentrant {
+        require(
+            block.timestamp > lastPurchaseTimestamp + 12 hours,
+            "Too soon to disburse"
+        );
+
+        uint256 purchase = purchases[latestBuyer];
+        require(purchase > 0, "No purchase to disburse");
+
+        uint256 refund = (purchase * 75) / 100;
+        if (msg.sender == latestBuyer) {
+            if (snapshotBalance == 0) {
+                snapshotBalance = address(this).balance;
+            }
+            refund += (snapshotBalance * 15) / 100;
+        }
+
+        _safeTransfer(msg.sender, refund);
+        purchases[latestBuyer] = 0;
+
+        if (!paused()) {
+            _pause();
+        }
+
+        emit Disbursement(msg.sender, refund);
+    }
+
+    function disburse(address to) external onlyFactory {
+        uint256 balance = address(this).balance;
+        _safeTransfer(to, balance);
+        _pause();
+
+        emit Disbursement(to, balance);
     }
 
     function _safeTransfer(address to, uint256 amount) private {
@@ -80,17 +123,5 @@ contract iBot is Initializable, ReentrancyGuard, Pausable {
         require(success, "Transfer failed");
     }
 
-    function pause() external onlyFactory {
-        _pause();
-    }
-
-    function unpause() external onlyFactory {
-        _unpause();
-    }
-
     receive() external payable {}
-
-    fallback() external payable {
-        revert("Function does not exist");
-    }
 }
